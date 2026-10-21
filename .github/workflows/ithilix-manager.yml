@@ -1,0 +1,35 @@
+name: ITHILIX Manager
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+permissions:
+  id-token: write
+  contents: read
+concurrency:
+  group: ithilix-manager
+  cancel-in-progress: false
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Procesar trabajo interno
+        shell: python
+        env:
+          CALLBACK_URL: https://biz-bridge-bilingual.lovable.app/api/public/coordination/tick
+        run: |
+          import os, json, datetime, urllib.request, urllib.parse
+          # No calls beyond the launch window; no automatic HTTP retries.
+          if datetime.datetime.now(datetime.timezone.utc) >= datetime.datetime(2026,11,4,5,tzinfo=datetime.timezone.utc):
+              print('Ventana de lanzamiento finalizada; deshabilitar este workflow.')
+              raise SystemExit(0)
+          audience = os.environ['CALLBACK_URL']
+          token_url = os.environ['ACTIONS_ID_TOKEN_REQUEST_URL'] + '&audience=' + urllib.parse.quote(audience, safe='')
+          req = urllib.request.Request(token_url, headers={'Authorization':'Bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']})
+          with urllib.request.urlopen(req, timeout=30) as response:
+              token = json.load(response)['value']
+          # Never print identity credentials or request headers.
+          req = urllib.request.Request(audience, data=b'{}', headers={'Authorization':'Bearer '+token, 'Content-Type':'application/json'})
+          with urllib.request.urlopen(req, timeout=360) as response:
+              result = json.load(response)
+          print('Ejecucion:', result.get('tickId'), 'Trabajos:', result.get('processed'))
